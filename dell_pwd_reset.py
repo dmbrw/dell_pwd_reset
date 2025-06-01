@@ -219,6 +219,8 @@ class DellPasswordResetEmulator:
                 image_data.find((base_adjust + p_reset_guid_rva).to_bytes(length=8, byteorder="little"))
             )
             p_interface = pe.get_data(pp_reset_guid_rva + 0x10, 8)
+
+            # the validate function is the third fn ptr in the interface
             p_validate_fn = pe.get_data(
                 int.from_bytes(p_interface, byteorder="little") + 0x10 - base_adjust, 8
             )
@@ -235,7 +237,8 @@ class DellPasswordResetEmulator:
         # Reset emulation state
         self.filled_servicetag = False
         self.emulated_reset_pwd = ""
-        
+
+        # temporary filename for module is the hash 
         data = section_info["section"].data
         file_path = path.join(root_path, section_info["md5"])
         
@@ -274,6 +277,7 @@ class DellPasswordResetEmulator:
         start_address = image_base + section_info["validate_fn"]
 
         # Map memory for function arguments
+        # R8 normally holds the user input - there's none but it still has to be mapped
         ql.arch.regs.write("R8", ql.mem.map_anywhere(0x10, minaddr=0x10000))
         buffer_size_va = ql.mem.map_anywhere(0x8, minaddr=0x10000)
         ql.mem.write(buffer_size_va, b'\x10\x00\x00\x00\x00\x00\x00\x00')
@@ -331,6 +335,8 @@ class DellPasswordResetEmulator:
                         ql.log.info(f"Found validate function @ 0x{address:x}")
                         
                         # Handle different firmware versions
+                        # On some older firmware, the DeviceId (2 bytes) is not passed
+                        # so there's only 5 args - the last arg is always 1
                         arg5 = ql.arch.stack_read(0x20)
                         if arg5 != 1:
                             ql.arch.stack_write(0x20, device_key)
@@ -443,9 +449,9 @@ class DellPasswordResetEmulator:
 
 
 def main():
-    """Main entry point with command-line interface."""
+    """Main entry point with CLI."""
     parser = argparse.ArgumentParser(
-        description="Dell Password Reset Emulator - Extract and emulate Dell firmware password reset functionality",
+        description="Dell Password Reset - Extract and emulate Dell firmware password reset functionality",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
